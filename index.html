@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>フィールド探索 - マルチプレイβ</title>
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-border: #223041;
+    --accent: #5ec9a6;
+    --accent-dim: #2f4b42;
+    --text: #d7e2ea;
+    --text-dim: #7f92a3;
+    --grass: #1c3326;
+    --grass2: #1a2e22;
+    --water: #12314a;
+    --path: #3a3327;
+    --tree: #14261c;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic", -apple-system, sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  #app{
+    display:flex; flex-direction:column; height:100vh; height:100dvh;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px;
+    background: var(--panel);
+    border-bottom:1px solid var(--panel-border);
+    flex-shrink:0;
+  }
+  header h1{
+    font-size:14px; margin:0; letter-spacing:.05em; color: var(--accent);
+    font-weight:600;
+  }
+  #status{
+    font-size:11px; color: var(--text-dim);
+    display:flex; align-items:center; gap:6px;
+  }
+  #status .dot{
+    width:7px; height:7px; border-radius:50%; background:#e0574a;
+    display:inline-block;
+  }
+  #status.online .dot{ background: var(--accent); }
+  #canvasWrap{
+    position:relative;
+    flex:1;
+    overflow:hidden;
+    background: var(--grass2);
+  }
+  canvas{
+    position:absolute; top:0; left:0;
+    image-rendering: pixelated;
+  }
+  #playerList{
+    position:absolute; top:56px; right:10px;
+    background: rgba(18,24,33,.85);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    padding:8px 10px;
+    font-size:11px;
+    max-width:150px;
+    max-height:180px;
+    overflow-y:auto;
+    backdrop-filter: blur(3px);
+  }
+  #playerList .title{
+    color: var(--text-dim); font-size:10px; margin-bottom:4px; letter-spacing:.05em;
+  }
+  #playerList .p{
+    display:flex; align-items:center; gap:6px; padding:2px 0;
+  }
+  #playerList .sw{
+    width:8px; height:8px; border-radius:2px; flex-shrink:0;
+  }
+  #nameEntry{
+    position:absolute; inset:0;
+    background: rgba(11,15,20,.92);
+    display:flex; align-items:center; justify-content:center;
+    z-index:50;
+  }
+  #nameEntry .card{
+    background: var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:14px;
+    padding:28px 24px;
+    width: min(320px, 85vw);
+    text-align:center;
+  }
+  #nameEntry h2{ font-size:16px; margin:0 0 6px; color:var(--accent); }
+  #nameEntry p{ font-size:12px; color:var(--text-dim); margin:0 0 18px; line-height:1.6; }
+  #nameEntry input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    background:#0d1319;
+    color:var(--text);
+    font-size:14px;
+    margin-bottom:12px;
+  }
+  #nameEntry input:focus{ outline:1px solid var(--accent); }
+  #nameEntry button{
+    width:100%;
+    padding:10px 12px;
+    border-radius:8px;
+    border:none;
+    background: var(--accent);
+    color:#0b0f14;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  #nameEntry button:disabled{ opacity:.4; }
+  #serverPicker{
+    position:relative;
+    margin-bottom:16px;
+  }
+  #serverPickerBtn{
+    width:100%;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    background:#0d1319;
+    color:var(--text);
+    font-size:14px;
+    font-weight:400;
+    cursor:pointer;
+  }
+  #serverPickerBtn .arrow{ color: var(--text-dim); font-size:11px; transition: transform .15s ease; }
+  #serverPicker.open #serverPickerBtn .arrow{ transform: rotate(180deg); }
+  #serverPicker.open #serverPickerBtn{ border-color: var(--accent); }
+  #serverDropdown{
+    display:none;
+    position:absolute;
+    top: calc(100% + 6px);
+    left:0; right:0;
+    background: var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    overflow:hidden;
+    max-height:180px;
+    overflow-y:auto;
+    z-index:60;
+    text-align:left;
+  }
+  #serverPicker.open #serverDropdown{ display:block; }
+  .serverItem{
+    display:flex; align-items:center; justify-content:space-between;
+    width:100%;
+    padding:10px 12px;
+    border:none;
+    border-bottom:1px solid var(--panel-border);
+    background:#0d1319;
+    color:var(--text);
+    font-size:13px;
+    cursor:pointer;
+  }
+  .serverItem:last-child{ border-bottom:none; }
+  .serverItem .sCount{ font-size:11px; color:var(--text-dim); }
+  .serverItem.selected{ background: rgba(94,201,166,.1); }
+  .serverItem.selected .sName{ color: var(--accent); }
+
+  #headerRight{
+    display:flex; align-items:center; gap:10px;
+  }
+  #settingsBtn{
+    background: transparent;
+    border:1px solid var(--panel-border);
+    color: var(--text-dim);
+    width:26px; height:26px;
+    border-radius:6px;
+    font-size:14px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #settingsPanel{
+    display:none;
+    position:absolute; top:10px; right:10px;
+    background: rgba(18,24,33,.95);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    padding:12px;
+    font-size:12px;
+    width:170px;
+    z-index:40;
+  }
+  #settingsPanel.open{ display:block; }
+  #settingsPanel .settingsRow{
+    display:flex; justify-content:space-between;
+    margin-bottom:6px; color: var(--text-dim);
+  }
+  #settingsPanel .settingsRow .k{ color: var(--text-dim); }
+  #settingsPanel #stName, #settingsPanel #stServer{ color: var(--text); }
+  #logoutBtn{
+    width:100%;
+    margin-top:6px;
+    padding:8px;
+    border-radius:6px;
+    border:1px solid #7a2a22;
+    background: rgba(224,87,74,.15);
+    color:#e0574a;
+    font-size:12px;
+    cursor:pointer;
+  }
+
+  #dpad{
+    position:absolute; bottom:18px; left:18px;
+    width:130px; height:130px;
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap:4px;
+    opacity:.85;
+    user-select:none;
+  }
+  #dpad button{
+    background: rgba(18,24,33,.8);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    color: var(--accent);
+    font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    touch-action: none;
+  }
+  #dpad .up{ grid-column:2; grid-row:1; }
+  #dpad .left{ grid-column:1; grid-row:2; }
+  #dpad .down{ grid-column:2; grid-row:3; }
+  #dpad .right{ grid-column:3; grid-row:2; }
+  #hint{
+    position:absolute; bottom:18px; right:18px;
+    font-size:10px; color: var(--text-dim);
+    background: rgba(18,24,33,.7);
+    padding:6px 10px; border-radius:6px;
+    max-width:150px; line-height:1.5;
+  }
+  #attackBtn{
+    position:absolute; bottom:100px; right:24px;
+    width:64px; height:64px;
+    border-radius:50%;
+    background: rgba(224,87,74,.85);
+    border:1px solid #7a2a22;
+    color:#fff;
+    font-size:24px;
+    touch-action: none;
+    cursor:pointer;
+  }
+  #attackBtn:active{ background: rgba(224,87,74,1); transform: scale(.94); }
+  #chatPanel{
+    display:flex;
+    position:absolute;
+    top:64px; left:10px;
+    width:190px;
+    height:170px;
+    background: rgba(18,24,33,.62);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    flex-direction:column;
+    z-index:20;
+    overflow:hidden;
+    transition: background .15s ease;
+  }
+  #chatPanel:focus-within{ background: rgba(18,24,33,.9); }
+  #chatMessages{
+    flex:1;
+    overflow-y:auto;
+    padding:6px 8px;
+    font-size:10.5px;
+    display:flex; flex-direction:column; gap:3px;
+  }
+  #chatMessages .msg{ line-height:1.4; word-break:break-word; }
+  #chatMessages .msg .nm{ font-weight:700; margin-right:4px; }
+  #chatMessages .msg.me .nm{ color: var(--accent); }
+  #chatMessages .msg .tx{ color: var(--text); }
+  #chatMessages .sys{ color: var(--text-dim); font-size:9.5px; text-align:center; }
+  #chatInputRow{
+    display:flex; gap:4px;
+    padding:6px;
+    border-top:1px solid var(--panel-border);
+  }
+  #chatInputRow input{
+    flex:1;
+    padding:6px 8px;
+    border-radius:5px;
+    border:1px solid var(--panel-border);
+    background:#0d1319;
+    color:var(--text);
+    font-size:11px;
+    min-width:0;
+  }
+  #chatInputRow input:focus{ outline:1px solid var(--accent); }
+  #chatInputRow button{
+    padding:6px 9px;
+    border-radius:5px;
+    border:none;
+    background: var(--accent);
+    color:#0b0f14;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #hpBarWrap{
+    position:absolute; top:10px; left:10px;
+    display:flex; align-items:center; gap:6px;
+    background: rgba(18,24,33,.85);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    padding:6px 10px;
+  }
+  #hpBarWrap .hpLabel{ font-size:10px; color:var(--text-dim); }
+  #hpBarOuter{
+    width:100px; height:8px;
+    background:#2a1414;
+    border-radius:4px;
+    overflow:hidden;
+  }
+  #hpBarInner{
+    height:100%;
+    width:100%;
+    background: linear-gradient(90deg,#e0574a,#e0a35c);
+    transition: width .15s ease;
+  }
+  @media (min-width: 720px){
+    #dpad{ display:none; }
+    #attackBtn{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>FIELD // マルチプレイβ</h1>
+    <div id="headerRight">
+      <div id="status"><span class="dot"></span><span id="statusText">接続中...</span><span id="serverTag"></span></div>
+      <button id="settingsBtn" title="設定">⚙</button>
+    </div>
+  </header>
+  <div id="canvasWrap">
+    <canvas id="game"></canvas>
+    <div id="playerList">
+      <div class="title">プレイヤー (<span id="pCount">0</span>)</div>
+      <div id="pListItems"></div>
+    </div>
+    <div id="dpad">
+      <button class="up" data-dir="up">▲</button>
+      <button class="left" data-dir="left">◀</button>
+      <button class="down" data-dir="down">▼</button>
+      <button class="right" data-dir="right">▶</button>
+    </div>
+    <button id="attackBtn">⚔</button>
+    <div id="chatPanel">
+      <div id="chatMessages"></div>
+      <div id="chatInputRow">
+        <input id="chatInput" type="text" placeholder="メッセージ..." maxlength="200">
+        <button id="chatSendBtn">送信</button>
+      </div>
+    </div>
+    <div id="hpBarWrap">
+      <div class="hpLabel">HP</div>
+      <div id="hpBarOuter"><div id="hpBarInner"></div></div>
+    </div>
+    <div id="hint">矢印/WASDで移動・スペースで攻撃モーション<br>スマホは左下パッド＋⚔ボタン</div>
+    <div id="settingsPanel">
+      <div class="settingsRow"><span class="k">名前</span><span id="stName">-</span></div>
+      <div class="settingsRow"><span class="k">サーバー</span><span id="stServer">-</span></div>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+  </div>
+
+  <div id="nameEntry">
+    <div class="card">
+      <h2>フィールドに入る</h2>
+      <p>他のプレイヤーと同じマップを歩き回れます。<br>表示する名前とサーバーを選んでください。</p>
+      <input id="nameInput" type="text" placeholder="なまえ" maxlength="10">
+      <div id="serverPicker">
+        <button type="button" id="serverPickerBtn">
+          <span id="serverPickerLabel">サーバーA</span>
+          <span class="arrow">▾</span>
+        </button>
+        <div id="serverDropdown"></div>
+      </div>
+      <button id="enterBtn" disabled>入る</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// =====================================================================
+// Firebase 設定
+// 既存のクイズアプリと同じプロジェクトを使う場合はその config をここに
+// 貼り付けてください。未設定の場合は下の値を自分の Firebase プロジェクトの
+// ものに置き換える必要があります（Realtime Database を有効化してください）。
+// =====================================================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getDatabase, ref, set, get, onValue, onDisconnect, remove, serverTimestamp, update, push, query, limitToLast
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBta87OMNwxPAsKqO1qflrKyc8nWAWTr7c",
+  authDomain: "on-linegames.firebaseapp.com",
+  databaseURL: "https://on-linegames-default-rtdb.firebaseio.com",
+  projectId: "on-linegames",
+  storageBucket: "on-linegames.firebasestorage.app",
+  messagingSenderId: "89905148934",
+  appId: "1:89905148934:web:42ba2f78ecc5c0cc5f3f87",
+};
+
+let db = null;
+let firebaseReady = false;
+try {
+  const fbApp = initializeApp(firebaseConfig);
+  db = getDatabase(fbApp);
+  firebaseReady = true;
+} catch (e) {
+  console.warn("Firebase 未設定、ローカルのみで動作します", e);
+}
+
+// =====================================================================
+// マップ定義（タイルベース）
+// =====================================================================
+const TILE = 32;
+const MAP_W = 40;
+const MAP_H = 40;
+
+// 0: 草, 1: 濃い草, 2: 水（進入不可）, 3: 道, 4: 木（進入不可）
+function generateMap() {
+  const map = [];
+  for (let y = 0; y < MAP_H; y++) {
+    const row = [];
+    for (let x = 0; x < MAP_W; x++) {
+      let t = (x + y) % 5 === 0 ? 1 : 0;
+      // 川
+      if (x === 20 || x === 21) t = 2;
+      // 湖
+      if (Math.hypot(x - 10, y - 30) < 4) t = 2;
+      // 橋(道)
+      if ((x === 20 || x === 21) && y % 8 === 3) t = 3;
+      // 森
+      if (Math.hypot(x - 30, y - 10) < 5 && (x + y * 3) % 3 === 0) t = 4;
+      if (Math.hypot(x - 8, y - 8) < 4 && (x + y) % 4 === 0) t = 4;
+      row.push(t);
+    }
+    map.push(row);
+  }
+  // 中央の広場
+  for (let y = 17; y <= 22; y++) {
+    for (let x = 16; x <= 24; x++) {
+      if (map[y] && map[y][x] !== 2) map[y][x] = 3;
+    }
+  }
+  return map;
+}
+const MAP = generateMap();
+function isBlocked(tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  const t = MAP[ty][tx];
+  return t === 2 || t === 4;
+}
+
+// =====================================================================
+// キャンバス
+// =====================================================================
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const wrap = document.getElementById("canvasWrap");
+function resize() {
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+window.addEventListener("resize", resize);
+resize();
+
+const TILE_COLORS = {
+  0: "#1c3326",
+  1: "#1a2e22",
+  2: "#12314a",
+  3: "#3a3327",
+  4: "#14261c",
+};
+
+// =====================================================================
+// プレイヤー状態
+// =====================================================================
+const COLORS = ["#5ec9a6", "#e0a35c", "#e0574a", "#6ba3e0", "#c77dd6", "#e0d15c"];
+let myId = null;
+let myName = null;
+let myColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+
+let me = { x: 18, y: 19, dir: "down", moving: false, hp: 100, maxHp: 100, attacking: false };
+const others = {}; // id -> {x,y,name,color,dir,ts,hp,maxHp,attacking}
+const monsters = {}; // id -> {name,x,y,hp,maxHp,dead,deadAt}
+const SPAWN = { x: 18, y: 19 };
+const ATTACK_DAMAGE = 20;
+const ATTACK_COOLDOWN = 450; // ms
+const ATTACK_ANIM_MS = 180;
+let lastAttackTime = 0;
+let currentPlayersPath = null;
+let currentMonstersPath = null;
+let running = false;
+
+// モンスター仮実装（固定配置・移動なし）
+const MONSTER_DEFS = [
+  { id: "m1", x: 14, y: 19, name: "スライムA" },
+  { id: "m2", x: 28, y: 19, name: "スライムB" },
+  { id: "m3", x: 18, y: 14, name: "スライムC" },
+  { id: "m4", x: 18, y: 26, name: "スライムD" },
+  { id: "m5", x: 22, y: 19, name: "スライムE" },
+];
+const MONSTER_MAX_HP = 60;
+const MONSTER_RESPAWN_MS = 8000;
+
+// 同期のクリーンアップ用（ログアウト時に呼ぶ）
+let unsubPlayers = null;
+let unsubMyHp = null;
+let unsubMonsters = null;
+let unsubChat = null;
+let posSyncIntervalId = null;
+let monsterRespawnIntervalId = null;
+let currentChatPath = null;
+
+function pxToWorld(x, y) { return { wx: x * TILE, wy: y * TILE }; }
+
+// =====================================================================
+// 入力
+// =====================================================================
+const keys = {};
+window.addEventListener("keydown", (e) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  const k = e.key.toLowerCase();
+  if (["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","spacebar"].includes(k)) e.preventDefault();
+  keys[k] = true;
+  if (k === " " || k === "spacebar") doAttack();
+});
+window.addEventListener("keyup", (e) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  keys[e.key.toLowerCase()] = false;
+});
+
+let padDir = null;
+document.querySelectorAll("#dpad button").forEach(btn => {
+  const dir = btn.dataset.dir;
+  const start = (e) => { e.preventDefault(); padDir = dir; };
+  const end = (e) => { e.preventDefault(); if (padDir === dir) padDir = null; };
+  btn.addEventListener("touchstart", start);
+  btn.addEventListener("touchend", end);
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("mouseup", end);
+  btn.addEventListener("mouseleave", end);
+});
+
+document.getElementById("attackBtn").addEventListener("touchstart", (e) => { e.preventDefault(); doAttack(); });
+document.getElementById("attackBtn").addEventListener("click", (e) => { e.preventDefault(); doAttack(); });
+
+let moveAccum = 0;
+const MOVE_INTERVAL = 130; // ms per tile
+let lastTime = performance.now();
+
+function getInputDir() {
+  if (keys["arrowup"] || keys["w"]) return "up";
+  if (keys["arrowdown"] || keys["s"]) return "down";
+  if (keys["arrowleft"] || keys["a"]) return "left";
+  if (keys["arrowright"] || keys["d"]) return "right";
+  if (padDir) return padDir;
+  return null;
+}
+
+function tryMove(dir) {
+  let nx = me.x, ny = me.y;
+  if (dir === "up") ny -= 1;
+  if (dir === "down") ny += 1;
+  if (dir === "left") nx -= 1;
+  if (dir === "right") nx += 1;
+  me.dir = dir;
+  if (!isBlocked(nx, ny)) {
+    me.x = nx; me.y = ny;
+    return true;
+  }
+  return false;
+}
+
+function frontTile() {
+  let fx = me.x, fy = me.y;
+  if (me.dir === "up") fy -= 1;
+  if (me.dir === "down") fy += 1;
+  if (me.dir === "left") fx -= 1;
+  if (me.dir === "right") fx += 1;
+  return { fx, fy };
+}
+
+function doAttack() {
+  const now = performance.now();
+  if (now - lastAttackTime < ATTACK_COOLDOWN) return;
+  if (me.hp <= 0) return;
+  lastAttackTime = now;
+  me.attacking = true;
+  setTimeout(() => { me.attacking = false; }, ATTACK_ANIM_MS);
+
+  if (!firebaseReady || !myId || !currentPlayersPath) return;
+
+  // 攻撃モーションを他プレイヤーにも見せる（PvPダメージなし）
+  update(ref(db, currentPlayersPath + "/" + myId), { attacking: true, attackTs: Date.now() });
+  setTimeout(() => update(ref(db, currentPlayersPath + "/" + myId), { attacking: false }), ATTACK_ANIM_MS);
+
+  // モンスターへの攻撃判定（仮実装）
+  if (currentMonstersPath) {
+    const { fx, fy } = frontTile();
+    for (const id in monsters) {
+      const m = monsters[id];
+      if (m.dead) continue;
+      if (m.x === fx && m.y === fy) {
+        const curHp = typeof m.hp === "number" ? m.hp : MONSTER_MAX_HP;
+        const newHp = Math.max(0, curHp - ATTACK_DAMAGE);
+        if (newHp <= 0) {
+          update(ref(db, currentMonstersPath + "/" + id), { hp: 0, dead: true, deadAt: Date.now() });
+        } else {
+          update(ref(db, currentMonstersPath + "/" + id), { hp: newHp });
+        }
+      }
+    }
+  }
+}
+
+function respawn() {
+  me.x = SPAWN.x; me.y = SPAWN.y; me.hp = me.maxHp;
+  if (firebaseReady && myId && currentPlayersPath) {
+    update(ref(db, currentPlayersPath + "/" + myId), { hp: me.maxHp, x: me.x, y: me.y });
+  }
+}
+
+// =====================================================================
+// Firebase 同期
+// =====================================================================
+function startSync() {
+  if (!firebaseReady) {
+    document.getElementById("statusText").textContent = "オフライン（Firebase未設定）";
+    return;
+  }
+  myId = "p_" + Math.random().toString(36).slice(2, 10);
+  const playersPath = "servers/" + selectedServer + "/players";
+  const monstersPath = "servers/" + selectedServer + "/monsters";
+  const chatPath = "servers/" + selectedServer + "/chat";
+  currentPlayersPath = playersPath;
+  currentMonstersPath = monstersPath;
+  currentChatPath = chatPath;
+  const myRef = ref(db, playersPath + "/" + myId);
+  set(myRef, { name: myName, color: myColor, x: me.x, y: me.y, dir: me.dir, hp: me.hp, maxHp: me.maxHp, attacking: false, ts: serverTimestamp() });
+  onDisconnect(myRef).remove();
+
+  unsubPlayers = onValue(ref(db, playersPath), (snap) => {
+    const val = snap.val() || {};
+    for (const id in others) if (!val[id]) delete others[id];
+    for (const id in val) {
+      if (id === myId) continue;
+      others[id] = val[id];
+    }
+    document.getElementById("pCount").textContent = Object.keys(val).length;
+    renderPlayerList(val);
+  });
+
+  // 自分のHPは今後PvE(モンスター)実装で書き換わる想定
+  unsubMyHp = onValue(ref(db, playersPath + "/" + myId + "/hp"), (snap) => {
+    if (!snap.exists()) return;
+    const newHp = snap.val();
+    me.hp = newHp;
+    updateHpBar();
+    if (me.hp <= 0) respawn();
+  });
+
+  // モンスターが未初期化ならこのサーバーに初期配置を作る
+  get(ref(db, monstersPath)).then((snap) => {
+    if (!snap.exists()) {
+      const init = {};
+      MONSTER_DEFS.forEach(m => {
+        init[m.id] = { name: m.name, x: m.x, y: m.y, hp: MONSTER_MAX_HP, maxHp: MONSTER_MAX_HP, dead: false, deadAt: 0 };
+      });
+      set(ref(db, monstersPath), init);
+    }
+  }).catch(() => {});
+
+  unsubMonsters = onValue(ref(db, monstersPath), (snap) => {
+    const val = snap.val() || {};
+    for (const id in monsters) if (!val[id]) delete monsters[id];
+    for (const id in val) monsters[id] = val[id];
+  });
+
+  monsterRespawnIntervalId = setInterval(() => {
+    if (!currentMonstersPath) return;
+    for (const id in monsters) {
+      const m = monsters[id];
+      if (m.dead && Date.now() - (m.deadAt || 0) > MONSTER_RESPAWN_MS) {
+        update(ref(db, currentMonstersPath + "/" + id), { hp: MONSTER_MAX_HP, dead: false, deadAt: 0 });
+      }
+    }
+  }, 1000);
+
+  document.getElementById("status").classList.add("online");
+  document.getElementById("statusText").textContent = "オンライン";
+  document.getElementById("serverTag").textContent = " / サーバー" + selectedServer;
+  document.getElementById("stName").textContent = myName;
+  document.getElementById("stServer").textContent = "サーバー" + selectedServer;
+
+  posSyncIntervalId = setInterval(() => {
+    update(myRef, { x: me.x, y: me.y, dir: me.dir, ts: serverTimestamp() });
+  }, 120);
+
+  // チャット購読（直近50件）
+  chatRenderedIds.clear();
+  document.getElementById("chatMessages").innerHTML = "";
+  unsubChat = onValue(query(ref(db, chatPath), limitToLast(50)), (snap) => {
+    const val = snap.val() || {};
+    const entries = Object.entries(val).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
+    for (const [id, m] of entries) {
+      if (chatRenderedIds.has(id)) continue;
+      chatRenderedIds.add(id);
+      appendChatMessage(m);
+    }
+  });
+  sendSystemChatMessage(myName + " が入室しました");
+}
+
+function logout() {
+  if (firebaseReady && myId && currentPlayersPath) {
+    remove(ref(db, currentPlayersPath + "/" + myId)).catch(() => {});
+  }
+  if (myName) sendSystemChatMessage(myName + " が退出しました");
+  if (posSyncIntervalId) clearInterval(posSyncIntervalId);
+  if (monsterRespawnIntervalId) clearInterval(monsterRespawnIntervalId);
+  if (unsubPlayers) unsubPlayers();
+  if (unsubMyHp) unsubMyHp();
+  if (unsubMonsters) unsubMonsters();
+  if (unsubChat) unsubChat();
+  posSyncIntervalId = null; monsterRespawnIntervalId = null;
+  unsubPlayers = null; unsubMyHp = null; unsubMonsters = null; unsubChat = null;
+
+  for (const id in others) delete others[id];
+  for (const id in monsters) delete monsters[id];
+  chatRenderedIds.clear();
+  document.getElementById("chatMessages").innerHTML = "";
+  myId = null;
+  currentPlayersPath = null;
+  currentMonstersPath = null;
+  currentChatPath = null;
+  running = false;
+
+  me.x = SPAWN.x; me.y = SPAWN.y; me.dir = "down"; me.hp = me.maxHp;
+
+  document.getElementById("settingsPanel").classList.remove("open");
+  document.getElementById("status").classList.remove("online");
+  document.getElementById("statusText").textContent = "接続中...";
+  document.getElementById("serverTag").textContent = "";
+  document.getElementById("pCount").textContent = "0";
+  document.getElementById("pListItems").innerHTML = "";
+  document.getElementById("nameEntry").style.display = "flex";
+}
+
+function updateHpBar() {
+  const pct = Math.max(0, Math.min(100, (me.hp / me.maxHp) * 100));
+  document.getElementById("hpBarInner").style.width = pct + "%";
+}
+
+const chatRenderedIds = new Set();
+
+function sendChatMessage(text) {
+  const trimmed = text.trim();
+  if (!trimmed || !firebaseReady || !currentChatPath) return;
+  push(ref(db, currentChatPath), {
+    name: myName, color: myColor, text: maskNgWords(trimmed).slice(0, 200), ts: serverTimestamp(),
+  });
+}
+
+function sendSystemChatMessage(text) {
+  if (!firebaseReady || !currentChatPath) return;
+  push(ref(db, currentChatPath), { system: true, text, ts: serverTimestamp() });
+}
+
+// 軽量NGワードフィルタ（該当語を＊で置き換えてから送信）
+const NG_WORDS = ["死ね", "殺す", "きもい", "うざい", "カス", "ゴミ", "ちんこ", "まんこ"];
+function maskNgWords(text) {
+  let result = text;
+  for (const w of NG_WORDS) {
+    if (!w) continue;
+    const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    result = result.replace(re, (m) => "＊".repeat(m.length));
+  }
+  return result;
+}
+
+function appendChatMessage(m) {
+  const box = document.getElementById("chatMessages");
+  const row = document.createElement("div");
+  if (m.system) {
+    row.className = "sys";
+    row.textContent = m.text;
+  } else {
+    const isMe = m.name === myName && m.color === myColor;
+    row.className = "msg" + (isMe ? " me" : "");
+    row.innerHTML = `<span class="nm" style="color:${m.color || "#5ec9a6"}">${escapeHtml(m.name || "???")}</span><span class="tx">${escapeHtml(m.text || "")}</span>`;
+  }
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderPlayerList(val) {
+  const el = document.getElementById("pListItems");
+  el.innerHTML = "";
+  const entries = Object.entries(val);
+  for (const [id, p] of entries) {
+    const row = document.createElement("div");
+    row.className = "p";
+    row.innerHTML = `<span class="sw" style="background:${p.color || "#5ec9a6"}"></span><span>${escapeHtml(p.name || "???")}${id === myId ? "（あなた）" : ""}</span>`;
+    el.appendChild(row);
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+// =====================================================================
+// 描画
+// =====================================================================
+function drawPlayer(px, py, color, dir, name, isMe, hp, maxHp, attacking) {
+  const size = TILE * 0.7;
+  const cx = px + TILE / 2;
+  const cy = py + TILE / 2;
+  ctx.save();
+  // 影
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath();
+  ctx.ellipse(cx, py + TILE - 4, size * 0.32, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 体
+  ctx.fillStyle = color;
+  ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+  // 向き示す三角
+  ctx.fillStyle = "#0b0f14";
+  const t = 5;
+  ctx.beginPath();
+  if (dir === "up") { ctx.moveTo(cx, cy - size/2); ctx.lineTo(cx-t, cy - size/2 + t); ctx.lineTo(cx+t, cy - size/2 + t); }
+  if (dir === "down") { ctx.moveTo(cx, cy + size/2); ctx.lineTo(cx-t, cy + size/2 - t); ctx.lineTo(cx+t, cy + size/2 - t); }
+  if (dir === "left") { ctx.moveTo(cx - size/2, cy); ctx.lineTo(cx - size/2 + t, cy - t); ctx.lineTo(cx - size/2 + t, cy + t); }
+  if (dir === "right") { ctx.moveTo(cx + size/2, cy); ctx.lineTo(cx + size/2 - t, cy - t); ctx.lineTo(cx + size/2 - t, cy + t); }
+  ctx.fill();
+
+  // 攻撃モーション（向いてる方向にスラッシュ）
+  if (attacking) {
+    let sx = cx, sy = cy;
+    if (dir === "up") sy -= size/2 + 6;
+    if (dir === "down") sy += size/2 + 6;
+    if (dir === "left") sx -= size/2 + 6;
+    if (dir === "right") sx += size/2 + 6;
+    ctx.strokeStyle = "#f2e6b0";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 9, 0, Math.PI * 1.5);
+    ctx.stroke();
+  }
+
+  // 名前
+  ctx.font = "10px sans-serif";
+  ctx.fillStyle = isMe ? "#5ec9a6" : "#d7e2ea";
+  ctx.textAlign = "center";
+  ctx.fillText(name || "", cx, py - 14);
+
+  // HPバー（頭上）
+  const barW = TILE * 0.8;
+  const barH = 4;
+  const bx = cx - barW / 2;
+  const by = py - 9;
+  const hpRatio = Math.max(0, Math.min(1, (hp ?? 100) / (maxHp || 100)));
+  ctx.fillStyle = "#2a1414";
+  ctx.fillRect(bx, by, barW, barH);
+  ctx.fillStyle = hpRatio > 0.3 ? "#5ec9a6" : "#e0574a";
+  ctx.fillRect(bx, by, barW * hpRatio, barH);
+
+  ctx.restore();
+}
+
+function drawMonster(px, py, name, hp, maxHp) {
+  const cx = px + TILE / 2;
+  const cy = py + TILE / 2;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath();
+  ctx.ellipse(cx, py + TILE - 4, TILE * 0.28, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#8b5fbf";
+  ctx.beginPath();
+  ctx.arc(cx, cy, TILE * 0.32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(cx - 5, cy - 2, 2.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 5, cy - 2, 2.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.font = "9px sans-serif";
+  ctx.fillStyle = "#c9a8e8";
+  ctx.textAlign = "center";
+  ctx.fillText(name || "", cx, py - 12);
+
+  const barW = TILE * 0.8, barH = 4;
+  const bx = cx - barW / 2, by = py - 8;
+  const ratio = Math.max(0, Math.min(1, (hp ?? maxHp) / (maxHp || 1)));
+  ctx.fillStyle = "#2a1414";
+  ctx.fillRect(bx, by, barW, barH);
+  ctx.fillStyle = ratio > 0.3 ? "#c77dd6" : "#e0574a";
+  ctx.fillRect(bx, by, barW * ratio, barH);
+  ctx.restore();
+}
+
+function render() {
+  const camX = me.x * TILE - canvas.width / 2 + TILE / 2;
+  const camY = me.y * TILE - canvas.height / 2 + TILE / 2;
+
+  ctx.fillStyle = "#0a0d11";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const startTx = Math.floor(camX / TILE) - 1;
+  const startTy = Math.floor(camY / TILE) - 1;
+  const tilesX = Math.ceil(canvas.width / TILE) + 2;
+  const tilesY = Math.ceil(canvas.height / TILE) + 2;
+
+  ctx.save();
+  ctx.translate(-camX, -camY);
+
+  for (let ty = startTy; ty < startTy + tilesY; ty++) {
+    for (let tx = startTx; tx < startTx + tilesX; tx++) {
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
+      const t = MAP[ty][tx];
+      ctx.fillStyle = TILE_COLORS[t];
+      ctx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+      if (t === 4) {
+        ctx.fillStyle = "#0e1a13";
+        ctx.beginPath();
+        ctx.arc(tx * TILE + TILE/2, ty * TILE + TILE/2, TILE*0.38, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // モンスター
+  for (const id in monsters) {
+    const m = monsters[id];
+    if (m.dead) continue;
+    drawMonster(m.x * TILE, m.y * TILE, m.name, m.hp, m.maxHp);
+  }
+
+  // 他プレイヤー
+  for (const id in others) {
+    const p = others[id];
+    drawPlayer(p.x * TILE, p.y * TILE, p.color || "#888", p.dir || "down", p.name, false, p.hp, p.maxHp, p.attacking);
+  }
+  // 自分
+  drawPlayer(me.x * TILE, me.y * TILE, myColor, me.dir, myName, true, me.hp, me.maxHp, me.attacking);
+
+  ctx.restore();
+}
+
+function loop(now) {
+  if (!running) return;
+  const dt = now - lastTime;
+  lastTime = now;
+  moveAccum += dt;
+  if (moveAccum >= MOVE_INTERVAL) {
+    const dir = getInputDir();
+    if (dir) tryMove(dir);
+    moveAccum = 0;
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+// =====================================================================
+// 名前入力→開始
+// =====================================================================
+const nameInput = document.getElementById("nameInput");
+const enterBtn = document.getElementById("enterBtn");
+const SERVERS = ["A", "B", "C", "D"];
+let selectedServer = "A";
+const serverPicker = document.getElementById("serverPicker");
+const serverPickerBtn = document.getElementById("serverPickerBtn");
+const serverPickerLabel = document.getElementById("serverPickerLabel");
+const serverDropdown = document.getElementById("serverDropdown");
+
+SERVERS.forEach(s => {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "serverItem" + (s === selectedServer ? " selected" : "");
+  item.dataset.server = s;
+  item.innerHTML = `<span class="sName">サーバー${s}</span><span class="sCount" id="count-${s}">-</span>`;
+  item.addEventListener("click", () => {
+    document.querySelectorAll(".serverItem").forEach(b => b.classList.remove("selected"));
+    item.classList.add("selected");
+    selectedServer = s;
+    serverPickerLabel.textContent = "サーバー" + s;
+    serverPicker.classList.remove("open");
+  });
+  serverDropdown.appendChild(item);
+
+  if (firebaseReady) {
+    onValue(ref(db, "servers/" + s + "/players"), (snap) => {
+      const val = snap.val() || {};
+      const el = document.getElementById("count-" + s);
+      if (el) el.textContent = Object.keys(val).length + "人";
+    });
+  }
+});
+
+serverPickerBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  serverPicker.classList.toggle("open");
+});
+document.addEventListener("click", (e) => {
+  if (!serverPicker.contains(e.target)) serverPicker.classList.remove("open");
+});
+
+nameInput.addEventListener("input", () => {
+  enterBtn.disabled = nameInput.value.trim().length === 0;
+});
+nameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !enterBtn.disabled) enterBtn.click();
+});
+enterBtn.addEventListener("click", () => {
+  myName = nameInput.value.trim().slice(0, 10);
+  document.getElementById("nameEntry").style.display = "none";
+  updateHpBar();
+  running = true;
+  lastTime = performance.now();
+  startSync();
+  requestAnimationFrame(loop);
+});
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsPanel = document.getElementById("settingsPanel");
+settingsBtn.addEventListener("click", () => {
+  settingsPanel.classList.toggle("open");
+});
+document.addEventListener("click", (e) => {
+  if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+    settingsPanel.classList.remove("open");
+  }
+});
+document.getElementById("logoutBtn").addEventListener("click", () => {
+  logout();
+});
+
+const chatInput = document.getElementById("chatInput");
+document.getElementById("chatSendBtn").addEventListener("click", () => {
+  sendChatMessage(chatInput.value);
+  chatInput.value = "";
+});
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    sendChatMessage(chatInput.value);
+    chatInput.value = "";
+  }
+});
+</script>
+</body>
+</html>
